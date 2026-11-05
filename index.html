@@ -39,7 +39,7 @@ function exerciseEditor(){
  '<div class="actions"><button type="button" class="soft small" id="add-exercise">+ Add exercise</button><button type="button" class="soft small" id="save-exercise">Save custom to bank</button></div>'+
  '<div id="exercise-rows">'+exerciseDraft.map((raw,i)=>{let ex=normalizeExercise(raw);return '<div class="entry"><div class="row"><strong>'+safe(ex.name)+'</strong><button type="button" class="danger small" data-remove-ex="'+i+'">Remove exercise</button></div>'+
  ex.setDetails.map((s,j)=>'<div class="formgrid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:7px"><div class="field"><label>Set '+(j+1)+' reps</label><input type="number" min="0" step="1" data-ex="'+i+'" data-set="'+j+'" data-key="reps" value="'+safe(s.reps)+'"></div><div class="field"><label>Weight</label><input inputmode="decimal" data-ex="'+i+'" data-set="'+j+'" data-key="weight" placeholder="lb / kg" value="'+safe(s.weight)+'"></div><div class="field"><label>Hold (sec)</label><input inputmode="decimal" data-ex="'+i+'" data-set="'+j+'" data-key="hold" value="'+safe(s.hold)+'"></div></div>').join('')+
- '<div class="actions"><button type="button" class="soft small" data-add-set="'+i+'">+ Add set</button><button type="button" class="soft small" data-remove-set="'+i+'" '+(ex.setDetails.length<=1?'disabled':'')+'>− Remove last set</button></div>'+
+ '<p class="sub" id="exercise-previous-'+i+'"></p><div class="actions"><button type="button" class="soft small" data-add-set="'+i+'">+ Add set</button><button type="button" class="soft small" data-remove-set="'+i+'" '+(ex.setDetails.length<=1?'disabled':'')+'>− Remove last set</button></div>'+
  '<div class="field section"><label>Exercise notes</label><input data-ex="'+i+'" data-key="notes" value="'+safe(ex.notes||'')+'"></div></div>'}).join('')+'</div></div>';
 }
 function refreshExerciseRows(){const el=$('exercise-rows');if(!el)return;let temp=document.createElement('div');temp.innerHTML=exerciseEditor();el.innerHTML=temp.querySelector('#exercise-rows').innerHTML;bindExerciseRows()}
@@ -49,10 +49,15 @@ function bindExerciseRows(){
  document.querySelectorAll('[data-add-set]').forEach(b=>b.onclick=()=>{let ex=exerciseDraft[Number(b.dataset.addSet)];if(ex.setDetails.length>=30)return;let prev=ex.setDetails.at(-1)||{};ex.setDetails.push({reps:'',weight:prev.weight||'',hold:''});refreshExerciseRows()});
  document.querySelectorAll('[data-remove-set]').forEach(b=>b.onclick=()=>{let ex=exerciseDraft[Number(b.dataset.removeSet)];if(ex.setDetails.length>1)ex.setDetails.pop();refreshExerciseRows()});
 }
+function isLiftCategory(n){return ['Glute strength','Pull / lock-offs','Push / antagonist','Strength','Lifting','Lift'].includes(n)}
+function previousLiftExercise(name){
+ const normalized=name.trim().toLowerCase();
+ return [...db.sessions].filter(s=>isLiftCategory(s.category)&&Array.isArray(s.exerciseSets)&&s.id!==edit?.id&&s.date<=date).sort((a,b)=>b.date.localeCompare(a.date)).flatMap(s=>s.exerciseSets.map(ex=>({ex,date:s.date}))).find(v=>v.ex.name?.trim().toLowerCase()===normalized)||null;
+}
 function bindExerciseEditor(){
  if(!$('add-exercise'))return;
  bindExerciseRows();
- $('add-exercise').onclick=()=>{let name=$('custom-exercise').value.trim()||$('exercise-choice').value;if(!name)return alert('Choose or type an exercise.');exerciseDraft.push({name,setDetails:[{reps:'',weight:'',hold:''}],notes:''});$('custom-exercise').value='';refreshExerciseRows()};
+ $('add-exercise').onclick=()=>{let name=$('custom-exercise').value.trim()||$('exercise-choice').value;if(!name)return alert('Choose or type an exercise.');let prior=isLiftCategory($('session-category')?.value)&&!edit?.id?previousLiftExercise(name):null;let entry=prior?normalizeExercise(prior.ex):{name,setDetails:[{reps:'',weight:'',hold:''}],notes:''};exerciseDraft.push({...entry,name,notes:''});$('custom-exercise').value='';refreshExerciseRows();if(prior){let info=$('exercise-previous-'+(exerciseDraft.length-1));if(info)info.textContent='Prefilled from '+prior.date+' · edit any set before saving.'}};
  $('save-exercise').onclick=()=>{let name=$('custom-exercise').value.trim();if(!name)return alert('Type an exercise name first.');if(!Object.values(EXERCISE_BANK).flat().some(x=>x.toLowerCase()===name.toLowerCase())&&!db.exerciseBank.some(x=>x.toLowerCase()===name.toLowerCase())){db.exerciseBank.push(name);persist()}alert('Added to your exercise bank.');};
 }
 function journal(){
